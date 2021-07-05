@@ -3,7 +3,7 @@ name: test
 on:
   release:
     types: [published, edited]
-    branches: [main]
+    branches: [main, test-action]
 
 jobs:
   test-usage:
@@ -17,6 +17,7 @@ jobs:
           cnil_personal_token: ${{ secrets.CNIL_PERSONAL_TOKEN }}
           cnil_grpc_host: ${{ secrets.CNIL_GRPC_HOST }}
           cnil_grpc_port: ${{ secrets.CNIL_GRPC_PORT }}
+          cnil_grpc_no_tls: false
           cnil_ledger: ${{ secrets.CNIL_LEDGER_ID }}
           release_url: ${{ github.event.release.url }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
