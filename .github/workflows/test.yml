@@ -10,9 +10,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Notarize release assets
-        # uses: codenotary/notarize-release-assets-action@v1.0.0
+        uses: codenotary/notarize-release-assets-action@v1.0.0
         # uses: codenotary/notarize-release-assets-action@main
-        uses: codenotary/notarize-release-assets-action@test-action
         with:
           cnil_rest_api_url: ${{ secrets.CNIL_REST_API_URL }}
           cnil_personal_token: ${{ secrets.CNIL_PERSONAL_TOKEN }}

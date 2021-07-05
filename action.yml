@@ -30,8 +30,8 @@ inputs:
     required: false
 runs:
   using: 'docker'
-  image: 'Dockerfile'
-  # image: 'docker://codenotary/notarize-release-assets:latest'
+  image: 'docker://codenotary/notarize-release-assets:latest'
+  # image: 'Dockerfile'
   args:
     - ${{ inputs.cnil_rest_api_url }}
     - ${{ inputs.cnil_personal_token }}
