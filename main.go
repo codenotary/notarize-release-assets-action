@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -56,7 +57,7 @@ type GitHubRelease struct {
 
 func main() {
 	// validate number of inputs
-	expectedNbArgs := 7
+	expectedNbArgs := 8
 	if len(os.Args)-1 != expectedNbArgs {
 		fmt.Printf(red, fmt.Sprintf(
 			"invalid args %v: expecting %d arguments values, got %d\n",
@@ -69,10 +70,23 @@ func main() {
 	cnilToken := getArg(2, "CNIL REST API personal token", true)
 	cnilHost := getArg(3, "CNIL gRPC API host", true)
 	cnilPort := getArg(4, "CNIL gRPC API port", true)
-	ledgerID := getArg(5, "CNIL ledger ID", true)
-	releaseURL := getArg(6, "Release URL", true)
-	githubToken := getArg(7, "GitHub token", false)
+	cnilNoTLS := getArg(5, "CNIL gRPC no TLS", false)
+	ledgerID := getArg(6, "CNIL ledger ID", true)
+	releaseURL := getArg(7, "Release URL", true)
+	githubToken := getArg(8, "GitHub token", false)
 	fmt.Println()
+
+	var err error
+	var noTLS bool
+	if len(cnilNoTLS) > 0 {
+		noTLS, err = strconv.ParseBool(cnilNoTLS)
+		if err != nil {
+			fmt.Print(red, fmt.Sprintf(
+				"ABORTING: error parsing the \"no TLS\" argument value \"%s\": %v\n",
+				cnilNoTLS, err))
+			os.Exit(1)
+		}
+	}
 
 	// reusable HTTP client
 	httpClient := &http.Client{Timeout: 30 * time.Second}
@@ -101,7 +115,7 @@ func main() {
 
 	// create temporary dir for storing downloaded assets
 	tmpDir, _ := filepath.Abs("notarize-release-assets")
-	if err := os.Mkdir(tmpDir, 0777); err != nil {
+	if err := os.Mkdir(tmpDir, os.ModePerm); err != nil {
 		fmt.Printf(red, fmt.Sprintf(
 			"ABORTING: error creating temp dir for storing downloaded assets: %v\n",
 			err))
@@ -124,11 +138,14 @@ func main() {
 
 	// make sure the local VCN store directory exists
 	options := &vcnOptions{storeDir: "./.vcn", cnilHost: cnilHost, cnilPort: cnilPort}
-	if err := os.MkdirAll(options.storeDir, os.ModeDir); err != nil {
+	if err := os.MkdirAll(options.storeDir, os.ModePerm); err != nil {
 		fmt.Printf(red, fmt.Sprintf(
 			"ABORTING: error creating local vcn store directory %s: %v\n", options.storeDir, err))
 		os.Exit(1)
 	}
+	// initialize VCN store
+	vcnStore.SetDir(options.storeDir)
+	vcnStore.LoadConfig()
 
 	// get and rotate or create API keys for each (unique) signer ID
 	cnilAPIOptions := &cnilOptions{baseURL: cnilURL, token: cnilToken, ledgerID: ledgerID}
@@ -156,7 +173,12 @@ func main() {
 			continue
 		}
 		options.cnilAPIKey = apiKey
-		vcnUser := newVCNCNILUser(options)
+		vcnUser, err := vcnAPI.NewLcUser(
+			options.cnilAPIKey, "", options.cnilHost, options.cnilPort, "", false, noTLS)
+		if err != nil {
+			fmt.Printf(red, fmt.Sprintf("ABORTING: error initializing vcn client: %v\n", err))
+			os.Exit(1)
+		}
 		if err := vcnUser.Client.Connect(); err != nil {
 			fmt.Printf(red, fmt.Sprintf("ABORTING: error connecting vcn client: %v\n", err))
 			os.Exit(1)
@@ -535,15 +557,6 @@ type vcnOptions struct {
 	cnilHost   string
 	cnilPort   string
 	cnilAPIKey string
-}
-
-func newVCNCNILUser(options *vcnOptions) *vcnAPI.LcUser {
-	vcnStore.SetDir(options.storeDir)
-	return vcnAPI.NewLcUserVolatile(
-		options.cnilAPIKey,
-		"",
-		options.cnilHost,
-		options.cnilPort)
 }
 
 func vcnArtifactFromAssetFile(filePath string) (*vcnAPI.Artifact, error) {
