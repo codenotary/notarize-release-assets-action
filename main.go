@@ -57,7 +57,7 @@ type GitHubRelease struct {
 
 func main() {
 	// validate number of inputs
-	expectedNbArgs := 8
+	expectedNbArgs := 9
 	if len(os.Args)-1 != expectedNbArgs {
 		fmt.Printf(red, fmt.Sprintf(
 			"invalid args %v: expecting %d arguments values, got %d\n",
@@ -66,14 +66,15 @@ func main() {
 	}
 
 	// validate inputs
-	cnilURL := strings.TrimSuffix(getArg(1, "CNIL REST API URL", true), "/")
-	cnilToken := getArg(2, "CNIL REST API personal token", true)
-	cnilHost := getArg(3, "CNIL gRPC API host", true)
-	cnilPort := getArg(4, "CNIL gRPC API port", true)
-	cnilNoTLS := getArg(5, "CNIL gRPC no TLS", false)
-	ledgerID := getArg(6, "CNIL ledger ID", true)
-	releaseURL := getArg(7, "Release URL", true)
-	githubToken := getArg(8, "GitHub token", false)
+	cnilHost := getArg(1, "CNIL gRPC API host", true)
+	cnilPort := getArg(2, "CNIL gRPC API port", true)
+	cnilNoTLS := getArg(3, "CNIL gRPC no TLS", false)
+	releaseURL := getArg(4, "Release URL", true)
+	githubToken := getArg(5, "GitHub token", false)
+	cnilAPIKey := getArg(6, "CNIL API key", false)
+	cnilURL := strings.TrimSuffix(getArg(7, "CNIL REST API URL", true), "/")
+	cnilToken := getArg(8, "CNIL REST API personal token", true)
+	ledgerID := getArg(9, "CNIL ledger ID", true)
 	fmt.Println()
 
 	var err error
@@ -86,6 +87,17 @@ func main() {
 				cnilNoTLS, err))
 			os.Exit(1)
 		}
+	}
+
+	var signerIDFromAPIKey string
+	if len(cnilAPIKey) > 0 {
+		pieces := strings.Split(cnilAPIKey, ".")
+		if len(pieces) < 2 {
+			fmt.Printf(red,
+				"the specified API key is not supported: must be of the form <identity>.<secret>")
+			os.Exit(1)
+		}
+		signerIDFromAPIKey = strings.Join(pieces[:len(pieces)-1], ".")
 	}
 
 	// reusable HTTP client
@@ -105,12 +117,23 @@ func main() {
 	repoAndTag := repoName + "-" + release.TagName
 	assetsNames := []string{repoAndTag + ".zip", repoAndTag + ".tar.gz"}
 	assetsURLs := []string{release.ZipballURL, release.TarballURL}
-	releaseAuthorSignerID := release.Author.Login + "@github"
-	signerIDs := []string{releaseAuthorSignerID, releaseAuthorSignerID}
+
+	var signerIDs []string
+	if len(signerIDFromAPIKey) > 0 {
+		signerIDs = []string{signerIDFromAPIKey, signerIDFromAPIKey}
+	} else {
+		releaseAuthorSignerID := release.Author.Login + "@github"
+		signerIDs = []string{releaseAuthorSignerID, releaseAuthorSignerID}
+	}
+
 	for _, asset := range release.Assets {
 		assetsNames = append(assetsNames, asset.Name)
 		assetsURLs = append(assetsURLs, asset.URL)
-		signerIDs = append(signerIDs, asset.Uploader.Login+"@github")
+		if len(signerIDFromAPIKey) > 0 {
+			signerIDs = append(signerIDs, signerIDFromAPIKey)
+		} else {
+			signerIDs = append(signerIDs, asset.Uploader.Login+"@github")
+		}
 	}
 
 	// create temporary dir for storing downloaded assets
@@ -147,12 +170,21 @@ func main() {
 	vcnStore.SetDir(options.storeDir)
 	vcnStore.LoadConfig()
 
-	// get and rotate or create API keys for each (unique) signer ID
-	cnilAPIOptions := &cnilOptions{baseURL: cnilURL, token: cnilToken, ledgerID: ledgerID}
-	apiKeys, err := getAndRotateOrCreateAPIKeys(httpClient, cnilAPIOptions, signerIDs)
-	if err != nil {
-		fmt.Printf(red, fmt.Sprintf("ABORTING: %v\n", err))
-		os.Exit(1)
+	var apiKeys []string
+	if len(cnilAPIKey) > 0 {
+		// just use the specified API key for all assets
+		apiKeys = make([]string, 0, len(signerIDs))
+		for range signerIDs {
+			apiKeys = append(apiKeys, cnilAPIKey)
+		}
+	} else {
+		// get and rotate or create API keys for each (unique) signer ID
+		cnilAPIOptions := &cnilOptions{baseURL: cnilURL, token: cnilToken, ledgerID: ledgerID}
+		apiKeys, err = getAndRotateOrCreateAPIKeys(httpClient, cnilAPIOptions, signerIDs)
+		if err != nil {
+			fmt.Printf(red, fmt.Sprintf("ABORTING: %v\n", err))
+			os.Exit(1)
+		}
 	}
 
 	// create and connect the vcn clients
