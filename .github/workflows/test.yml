@@ -10,16 +10,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Notarize release assets
-        uses: codenotary/notarize-release-assets-action@v1.0.0
+        uses: codenotary/notarize-release-assets-action@v2.0.0
         # uses: codenotary/notarize-release-assets-action@main
         with:
-          cnil_grpc_host: ${{ secrets.CNIL_GRPC_HOST }}
-          cnil_grpc_port: ${{ secrets.CNIL_GRPC_PORT }}
-          cnil_grpc_no_tls: false
+          cnil_host: ${{ secrets.CNIL_HOST }}
+          # if this input is omitted, default port 443 will be used:
+          cnil_grpc_port: 33443
           release_url: ${{ github.event.release.url }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          # required for private repos:
+          # github_token: ${{ secrets.GITHUB_TOKEN }}
           cnil_api_key: ${{ secrets.CNIL_API_KEY }}
-          # if the cnil_api_key (above) is specified, the following inputs will be ignored:
-          cnil_rest_api_url: ${{ secrets.CNIL_REST_API_URL }}
-          cnil_personal_token: ${{ secrets.CNIL_PERSONAL_TOKEN }}
-          cnil_ledger: ${{ secrets.CNIL_LEDGER_ID }}
+
+          # if this input is omitted, default port 443 will be used (only used if cnil_api_key is not provided):
+          # cnil_http_port: 33443
+
+          # if the cnil_api_key input is provided, the following inputs will be ignored:
+          # cnil_personal_token: ${{ secrets.CNIL_PERSONAL_TOKEN }}
+          # cnil_ledger: ${{ secrets.CNIL_LEDGER_ID }}
