@@ -66,15 +66,18 @@ func main() {
 	}
 
 	// validate inputs
-	cnilHost := getArg(1, "CNIL gRPC API host", true)
-	cnilPort := getArg(2, "CNIL gRPC API port", true)
-	cnilNoTLS := getArg(3, "CNIL gRPC no TLS", false)
-	releaseURL := getArg(4, "Release URL", true)
-	githubToken := getArg(5, "GitHub token", false)
-	cnilAPIKey := getArg(6, "CNIL API key", false)
-	cnilURL := strings.TrimSuffix(getArg(7, "CNIL REST API URL", true), "/")
-	cnilToken := getArg(8, "CNIL REST API personal token", true)
-	ledgerID := getArg(9, "CNIL ledger ID", true)
+	cnilHost := getArg(1, "CNIL host", true, "")
+	cnilgRPCPort := getArg(2, "CNIL gRPC API port", false, "443")
+	cnilNoTLS := getArg(3, "CNIL gRPC no TLS", false, "false")
+	releaseURL := getArg(4, "Release URL", true, "")
+	githubToken := getArg(5, "GitHub token", false, "")
+	cnilAPIKey := getArg(6, "CNIL API key", false, "")
+	cnilRESTPort := getArg(7, "CNIL REST API port", false, "443")
+	cnilToken := getArg(8, "CNIL REST API personal token", false, "")
+	ledgerID := getArg(9, "CNIL ledger ID", false, "")
+
+	cnilRESTURL := fmt.Sprintf("https://%s:%s/api/v1", cnilHost, cnilRESTPort)
+
 	fmt.Println()
 
 	var err error
@@ -160,7 +163,11 @@ func main() {
 	fmt.Printf("\nNotarizing %d release assets ...\n\n", len(assetsFiles))
 
 	// make sure the local VCN store directory exists
-	options := &vcnOptions{storeDir: "./.vcn", cnilHost: cnilHost, cnilPort: cnilPort}
+	options := &vcnOptions{
+		storeDir: "./.vcn",
+		cnilHost: cnilHost,
+		cnilPort: cnilgRPCPort,
+	}
 	if err := os.MkdirAll(options.storeDir, os.ModePerm); err != nil {
 		fmt.Printf(red, fmt.Sprintf(
 			"ABORTING: error creating local vcn store directory %s: %v\n", options.storeDir, err))
@@ -179,7 +186,7 @@ func main() {
 		}
 	} else {
 		// get and rotate or create API keys for each (unique) signer ID
-		cnilAPIOptions := &cnilOptions{baseURL: cnilURL, token: cnilToken, ledgerID: ledgerID}
+		cnilAPIOptions := &cnilOptions{baseURL: cnilRESTURL, token: cnilToken, ledgerID: ledgerID}
 		apiKeys, err = getAndRotateOrCreateAPIKeys(httpClient, cnilAPIOptions, signerIDs)
 		if err != nil {
 			fmt.Printf(red, fmt.Sprintf("ABORTING: %v\n", err))
@@ -262,13 +269,16 @@ func main() {
 		"All %d release assets have been successfully notarized.\n", len(assetsFiles)))
 }
 
-func getArg(argIndex int, argName string, required bool) string {
+func getArg(argIndex int, argName string, required bool, defaultVal string) string {
 	argVal := strings.TrimSpace(os.Args[argIndex])
 	fmt.Printf("  - %s: %s (length: %d)\n", argName, argVal, len(argVal))
 	if required && len(argVal) == 0 {
 		fmt.Printf(red, fmt.Sprintf(
 			"ABORTING: required argument %s value is empty\n", argName))
 		os.Exit(1)
+	}
+	if len(argVal) == 0 && len(defaultVal) > 0 {
+		argVal = defaultVal
 	}
 	return argVal
 }
